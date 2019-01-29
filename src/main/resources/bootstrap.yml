@@ -1,0 +1,68 @@
+# 与 spring-cloud 相关的属性必须配置在bootstrap.yml，config 部分内容才能被正确加载。
+# 因为 config 的相关配置会先于application.yml，而bootstrap.yml 的加载也是先于application.yml。
+
+spring:
+  security:
+    user:
+      name: admin
+      password: 123456
+  cloud:
+    config:
+      name: application # 对应{application}部分
+      profile: dev # 对应{profile}部分
+      label: master # 对应git的分支。如果配置中心使用的是本地存储，则该参数无用
+      fail-fast: true # 启动失败时能够快速响应
+      discovery:
+        enabled: true # 开启通过服务名发现配置中心
+        service-id: config-server # 指定配置中心的service-id，便于扩展为高可用配置集群。
+#    stream:
+#      rabbit:
+#        bindings:
+#          my_input:
+#            consumer:
+#              bindingRoutingKey: myKey.* # 设置一个RoutingKey信息
+#          my_output:
+#            producer:
+#              routing-key-expression: '''myKey.*''' # 定义 RoutingKey 的表达式配置
+#      binders: # 在此处配置要绑定的rabbitmq的服务信息；
+#        defaultRabbit: # 表示定义的名称，用于于binding整合
+#          type: rabbit # 消息组件类型
+#          environment: # 设置rabbitmq的相关的环境配置
+#            spring:
+#              rabbitmq:
+#                addresses: 192.168.20.134
+#                username: guest
+#                password: guest
+#                virtual-host: /
+#      bindings: # 服务的整合处理
+#        output: # 这个名字是一个通道的名称
+#          destination: studyExchange # 表示要使用的Exchange名称定义
+#          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
+#          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+#        input: # 这个名字是一个通道的名称
+#          destination: studyExchange # 表示要使用的Exchange名称定义
+#          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
+#          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+#          group: groupA # 指定分组名，防止负载时重复消费。（负载中分组名需设置不同值）PS：如有同时处理的需求，则不添加分组
+#        my_output: # 这个名字是一个通道的名称，在分析具体源代码的时候会进行说明
+#          destination: studyExchange # 表示要使用的Exchange名称定义
+#          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
+#          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+#        my_input: # 这个名字是一个通道的名称，在分析具体源代码的时候会进行说明
+#          destination: studyExchange # 表示要使用的Exchange名称定义
+#          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
+#          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+#          group: myGroupA
+
+# 注册中心配置
+eureka:
+  instance:
+    prefer-ip-address: true
+    hostname: 192.168.20.134 # 服务注册中心IP地址
+    # 心跳检测检测与续约时间
+    # 测试时将值设置设置小些，保证服务关闭后注册中心能及时踢出服务
+    lease-renewal-interval-in-seconds: 1 # 每间隔1s，向服务端发送一次心跳，证明自己依然”存活“
+    lease-expiration-duration-in-seconds: 2 # 告诉服务端，如果我2s之内没有给你发心跳，就代表我“死”了，将我踢出掉。
+  client:
+    service-url:
+      defaultZone: http://${spring.security.user.name}:${spring.security.user.password}@${eureka.instance.hostname}:8761/eureka/ # 注册中心地址
