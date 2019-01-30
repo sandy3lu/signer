@@ -1,9 +1,9 @@
 server:
-  port: 9002  #服务端口号
+  port: 9024  #服务端口号
 
 spring:
   application:
-    name: pms-kmc # 注册服务名
+    name: pms-signer # 注册服务名
   datasource:
     url: jdbc:mysql://192.168.20.16:3306/pms_kmc?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=GMT%2B8
     username: kmc
