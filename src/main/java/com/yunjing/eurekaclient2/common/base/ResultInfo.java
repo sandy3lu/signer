@@ -4,7 +4,9 @@ package com.yunjing.eurekaclient2.common.base;
 import org.apache.http.HttpStatus;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * @ClassName ResultInfo
@@ -56,5 +58,21 @@ public class ResultInfo extends HashMap<String, Object> {
     public ResultInfo put(String key, Object value) {
         super.put(key, value);
         return this;
+    }
+
+    @Override
+    public String toString() {
+        StringBuffer sb = new StringBuffer();
+        Set<String> keys = this.keySet();
+        Iterator<String> it = keys.iterator();
+        while(it.hasNext()){
+            String key = it.next();
+            Object value = this.get(key);
+            sb.append("<" +key);
+            sb.append(":");
+            sb.append(value);
+            sb.append(">"  );
+        }
+        return "ResultInfo{" + sb.toString() + "}";
     }
 }

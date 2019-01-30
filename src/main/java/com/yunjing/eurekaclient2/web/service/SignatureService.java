@@ -1,7 +1,6 @@
 package com.yunjing.eurekaclient2.web.service;
 
-import com.yunjing.eurekaclient2.web.entity.Key;
-import com.baomidou.mybatisplus.extension.service.IService;
+
 import org.bouncycastle.crypto.CryptoException;
 
 import java.io.IOException;
@@ -15,7 +14,7 @@ import java.io.IOException;
  * @author scyking-auto
  * @since 2019-01-28
  */
-public interface SignatureService extends IService<Key> {
+public interface SignatureService {
 
 
     String SM2 = "SM2";

@@ -2,23 +2,27 @@ package com.yunjing.eurekaclient2.web.service.impl;
 
 
 import com.yunjing.eurekaclient2.common.base.ResultInfo;
-import com.yunjing.eurekaclient2.feign.remote.Client1Remote;
-import com.yunjing.eurekaclient2.web.entity.Key;
-import com.yunjing.eurekaclient2.web.mapper.KeyMapper;
-import com.yunjing.eurekaclient2.web.service.SignatureService;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yunjing.eurekaclient2.feign.remote.KeyServiceRemote;
 
+import com.yunjing.eurekaclient2.web.service.SignatureService;
+
+
+import org.apache.http.HttpStatus;
+import org.bouncycastle.asn1.nist.NISTObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.crypto.CryptoException;
 
-import org.bouncycastle.crypto.params.ECDomainParameters;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.crypto.digests.SHA256Digest;
+import org.bouncycastle.crypto.params.*;
 
+import org.bouncycastle.crypto.signers.RSADigestSigner;
 import org.bouncycastle.crypto.signers.SM2Signer;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPrivateCrtKey;
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPrivateKey;
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import org.bouncycastle.jce.spec.ECParameterSpec;
@@ -42,7 +46,7 @@ import java.security.*;
  * @since 2019-01-28
  */
 @Service
-public class SignatureServiceImpl extends ServiceImpl<KeyMapper, Key> implements SignatureService {
+public class SignatureServiceImpl implements SignatureService {
 
     protected Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -50,7 +54,7 @@ public class SignatureServiceImpl extends ServiceImpl<KeyMapper, Key> implements
     public String useToken;
 
     @Autowired
-    Client1Remote client1Remote;
+    KeyServiceRemote keyServiceRemote;
 
     @Override
     public boolean verify(String algorithmID, String publicKey, byte[] data, byte[] sig) throws IOException {
@@ -59,9 +63,24 @@ public class SignatureServiceImpl extends ServiceImpl<KeyMapper, Key> implements
                 return verifySM2(publicKey,data,sig);
 
             case RSA:
-                break;
+                return verifyRSA(publicKey,data,sig);
+
         }
         return false;
+    }
+
+    private boolean verifyRSA(String publicKey, byte[] data, byte[] sig) throws IOException {
+
+        byte[] keydata = ByteUtils.fromHexString(publicKey);
+        SubjectPublicKeyInfo subjectPublicKeyInfo = SubjectPublicKeyInfo.getInstance(keydata);
+        PublicKey pubkey = BouncyCastleProvider.getPublicKey(subjectPublicKeyInfo);
+        BCRSAPublicKey rsa = (BCRSAPublicKey) pubkey;
+
+        RSAKeyParameters rsaPublic = new RSAKeyParameters(false, rsa.getModulus(), rsa.getPublicExponent());
+        RSADigestSigner signer = new RSADigestSigner(new SHA256Digest(), NISTObjectIdentifiers.id_sha256);
+        signer.init(false, rsaPublic);
+        signer.update(data, 0, data.length);
+        return signer.verifySignature(sig);
     }
 
     private boolean verifySM2(String publicKey, byte[] data, byte[] sig) throws IOException {
@@ -89,17 +108,19 @@ public class SignatureServiceImpl extends ServiceImpl<KeyMapper, Key> implements
     @Override
     public byte[] sign(String userID, int keyID, byte[] data) throws IOException, CryptoException {
         // get private and public key from kmc
-        ResultInfo rs = client1Remote.getKey(userID,keyID);
-        String code = (String)rs.get("code");
-        if(code.equals("200")){
+        ResultInfo rs = keyServiceRemote.getKey(userID,keyID);
+
+        int code = (int)rs.get("code");
+        if(code == HttpStatus.SC_OK){
             String publicKey = (String)rs.get("publicKey");
             String privateKey = (String)rs.get("privateKey");
-            if(publicKey.length()<2048){
+            String type = (String)rs.get("keyType");
+            if(type.toLowerCase().contains("sm2")){
                 //SM2
                 return sign(SM2,privateKey,publicKey,data);
             }else{
                 //RSA
-                return new byte[0];
+                return sign(RSA,privateKey,publicKey,data);
             }
 
         }else{
@@ -108,15 +129,30 @@ public class SignatureServiceImpl extends ServiceImpl<KeyMapper, Key> implements
     }
 
     @Override
-    public byte[] sign(String algorithmID, String keyContent, String publicKey, byte[] data) throws IOException, CryptoException {
+    public byte[] sign(String algorithmID, String privateKey, String publicKey, byte[] data) throws IOException, CryptoException {
         switch (algorithmID){
             case SM2:
-                return signSM2(keyContent,publicKey,data);
+                return signSM2(privateKey,publicKey,data);
 
             case RSA:
-                break;
+                return signRSA(privateKey,data);
         }
         return new byte[0];
+    }
+
+    private byte[] signRSA(String privateKey, byte[] data) throws IOException, CryptoException {
+        byte[] keydata = ByteUtils.fromHexString(privateKey);
+        org.bouncycastle.asn1.pkcs.PrivateKeyInfo privateKeyInfo = PrivateKeyInfo.getInstance(keydata);
+        BCRSAPrivateCrtKey rsa= (BCRSAPrivateCrtKey)BouncyCastleProvider.getPrivateKey(privateKeyInfo);
+
+        RSADigestSigner signer = new RSADigestSigner(new SHA256Digest());
+        RSAPrivateCrtKeyParameters rsaPrivate = new RSAPrivateCrtKeyParameters(rsa.getModulus(), rsa.getPublicExponent(), rsa.getPrivateExponent(),
+                rsa.getPrimeP(), rsa.getPrimeQ(), rsa.getPrimeExponentP(), rsa.getPrimeExponentQ(), rsa.getCrtCoefficient());
+
+        signer.init(true, rsaPrivate);
+        signer.update(data, 0, data.length);
+        byte[] sig = signer.generateSignature();
+        return sig;
     }
 
     private byte[] signSM2(String privateKey, String publicKey, byte[] data) throws IOException, CryptoException {
